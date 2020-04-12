@@ -203,7 +203,7 @@ function transferFunds(requestBy)
         self.editButton(paramValues[selectTo])
     end
     if selectFrom != 0 then
-        nmeFrom = paramValues[selectFrom].name
+        nameFrom = players[selectFrom].name
         local oldValue = players[selectFrom].value
         local totalValue = oldValue - newValue
         players[selectFrom].value = totalValue
