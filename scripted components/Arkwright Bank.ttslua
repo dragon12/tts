@@ -1,0 +1,154 @@
+--[[
+ Arkwright Bank - Scripted Bank for Arkwright by dragon12
+ Based off MrStump's The Bank, but tweaked for intuitive usability in Arkwright
+ Maintains player money, and also sends those updates to the player counters
+  ]]--
+
+--Changes maximum character count for names
+characterLimit = 14
+
+function onSave()
+    -- todo
+end
+
+function onload(saved_data)
+    -- todo
+    createButtons()
+end
+
+playerMoney_GUIDs = {Yellow='136092', Blue='570fad', Red='5eb67b', Green='287295'}
+
+fontSize = 150
+
+row1CoordZ = -0.8
+rowCoordZDelta = 0.35
+
+rowCoordsZ = {
+    row1CoordZ,
+    row1CoordZ + (rowCoordZDelta * 1),
+    row1CoordZ + (rowCoordZDelta * 2),
+    row1CoordZ + (rowCoordZDelta * 3),
+    row1CoordZ + (rowCoordZDelta * 4),
+    row1CoordZ + (rowCoordZDelta * 5),
+    row1CoordZ + (rowCoordZDelta * 6),
+}
+
+-- col1: is the player bank total
+-- col2: name
+-- col3: direction, input
+-- col4: transfer
+colCoordsX = {
+    -1.5,
+    -1.2,
+    0,
+    0.4,
+    0.8,
+    1.2,
+    1.6,
+}
+
+buttonYCoord = 0.2
+
+-- first column: the amounts
+totalsCoords = {
+    {colCoordsX[1], buttonYCoord, rowCoordsZ[1]},
+    {colCoordsX[1], buttonYCoord, rowCoordsZ[2]},
+    {colCoordsX[1], buttonYCoord, rowCoordsZ[3]},
+    {colCoordsX[1], buttonYCoord, rowCoordsZ[4]},
+}
+
+-- second column: player names
+playersCoords = {
+    {colCoordsX[2], buttonYCoord, rowCoordsZ[1]},
+    {colCoordsX[2], buttonYCoord, rowCoordsZ[2]},
+    {colCoordsX[2], buttonYCoord, rowCoordsZ[3]},
+    {colCoordsX[2], buttonYCoord, rowCoordsZ[4]},
+}
+
+-- calculator spans columns 3-6
+-- numbers 1-10 defined here
+calculatorCoords = {
+    {colCoordsX[3], buttonYCoord, rowCoordsZ[4]},
+    {colCoordsX[4], buttonYCoord, rowCoordsZ[4]},
+    {colCoordsX[5], buttonYCoord, rowCoordsZ[4]},
+
+    {colCoordsX[3], buttonYCoord, rowCoordsZ[3]},
+    {colCoordsX[4], buttonYCoord, rowCoordsZ[3]},
+    {colCoordsX[5], buttonYCoord, rowCoordsZ[3]},
+
+    {colCoordsX[3], buttonYCoord, rowCoordsZ[2]},
+    {colCoordsX[4], buttonYCoord, rowCoordsZ[2]},
+    {colCoordsX[5], buttonYCoord, rowCoordsZ[2]},
+
+    -- last column -- 10, reset, clear
+    {colCoordsX[6], buttonYCoord, rowCoordsZ[4]},
+    {colCoordsX[6], buttonYCoord, rowCoordsZ[3]},
+    {colCoordsX[6], buttonYCoord, rowCoordsZ[2]},
+}
+
+-- fourth column: Transfer button; there is only a single one
+--transferCoords = {colCoordsX[4], buttonYCoord, (rowCoordsZ[2] + rowCoordsZ[3]) / 2 }
+
+inputButtons = {}
+
+function createButtons()
+    for i=1,9 do
+        params = {label=i, click_function='calcButton',i, function_owner=self,
+                  position = calculatorCoords[i], width=200, height=200,
+                  font_size=fontSize }
+
+        self.createButton(params)
+    end
+end
+
+
+inputButtons = {
+    b1 = {
+        label='1', click_function='bp1', function_owner=self,
+        position={-2.6,0.1,1}, width=200, height=200, font_size=150
+    },
+    b2 = {
+        label='2', click_function='bp2', function_owner=self,
+        position={-2.2,0.1,1}, width=200, height=200, font_size=150
+    },
+    b3 = {
+        label='3', click_function='bp3', function_owner=self,
+        position={-1.8,0.1,1}, width=200, height=200, font_size=160
+    },
+    b4 = {
+        label='4', click_function='bp4', function_owner=self,
+        position={-2.6,0.1,0.6}, width=200, height=200, font_size=160
+    },
+    b5 = {
+        label='5', click_function='bp5', function_owner=self,
+        position={-2.2,0.1,0.6}, width=200, height=200, font_size=160
+    },
+    b6 = {
+        label='6', click_function='bp6', function_owner=self,
+        position={-1.8,0.1,0.6}, width=200, height=200, font_size=160
+    },
+    b7 = {
+        label='7', click_function='bp7', function_owner=self,
+        position={-2.6,0.1,0.2}, width=200, height=200, font_size=160
+    },
+    b8 = {
+        label='8', click_function='bp8', function_owner=self,
+        position={-2.2,0.1,0.2}, width=200, height=200, font_size=160
+    },
+    b9 = {
+        label='9', click_function='bp9', function_owner=self,
+        position={-1.8,0.1,0.2}, width=200, height=200, font_size=160
+    },
+    b0 = {
+        label='0', click_function='bp0', function_owner=self,
+        position={-1.4,0.1,0.8}, width=200, height=395, font_size=160
+    },
+    bclear = {
+        label='CLR', click_function='bpclear', function_owner=self,
+        position={-1.4,0.1,-0.2}, width=200, height=200, font_size=90
+    },
+    breset = {
+        label='RESET\nALL', click_function='bpreset', function_owner=self,
+        position={-1.4,0.1,0.2}, width=200, height=200, font_size=50
+    }
+}

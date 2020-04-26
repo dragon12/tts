@@ -1,0 +1,564 @@
+
+
+--[[
+ Age of Steam control board by dragon12
+  ]]--
+
+--[[
+  Helper tables from my library --
+  ]]--
+
+colorCodes = {
+    White = {r=1, g=1, b=1},
+    Brown = {r=0.443, g=0.231, b=0.09},
+    Red = {r=0.856, g=0.1, b=0.094},
+    Orange = {r=0.956, g=0.392, b=0.113},
+    Yellow = {r=0.905, g=0.898, b=0.172},
+    Green = {r=0.192, g=0.701, b=0.168},
+    Teal = {r=0.129, g=0.694, b=0.607},
+    Blue = {r=0.118, g=0.53, b=1},
+    Purple = {r=0.627, g=0.125, b=0.941},
+    Pink = {r=0.96, g=0.439, b=0.807},
+    Grey = {r=0.5, g=0.5, b=0.5},
+    Black = {r=0.25, g=0.25, b=0.25},
+}
+
+--[[
+  End helper tables from my library --
+  ]]--
+
+
+--Changes maximum character count for names
+characterLimit = 14
+
+-- current state of calculator
+activePlayer = 0
+activeAction = 0
+isNegated = false
+submittable = false
+
+debug = true
+players = {}
+
+buttonParams = {
+    calcDisplay = {},
+    submit = {},
+}
+
+function onSave()
+    -- todo
+end
+
+function onload(saved_data)
+    -- todo
+    initAll()
+end
+
+-- todo this will be called from elsewhere
+function initAll()
+    currIndex=0
+    spawnAll()
+end
+
+
+------ Set up all of the display stuff
+defaultFontSize = 150
+
+buttonYCoord = 0.2
+
+-- col1: Name
+-- col2: Action
+-- col3: calculator
+-- col4: submit (?)
+colCoordsX = {
+    -1.9, -- Name
+    -0.2,   -- Action
+    0.5,    -- Calculator
+    2.3,    -- Display and Submit
+}
+
+-- player names
+playerNameFontSize = defaultFontSize * 0.85
+playerNameRow1CoordZ = -0.9 -- where is row 1 on the z axis
+playerNameRowCoordZDelta = 0.38
+
+-- actions
+actionFontSize = defaultFontSize * 0.75
+actionCoordX = colCoordsX[2]
+actionRow1CoordZ = -0.7
+actionRowCoordZDelta = 0.4
+actionButtonWidth = 700
+actionButtonHeight = 200
+actionInactiveBackgroundColor = colorCodes.Grey
+actionActiveBackgroundColor = colorCodes.Black
+actionFont = colorCodes.White
+actions = {
+    {label='Issue Shares'},
+    {label='Gain Income'},
+    {label='Locomotive'},
+    {label='Pay Bid'},
+}
+
+-- calculator
+calculatorFontSize = defaultFontSize
+calculatorCoordX = colCoordsX[3]
+calculatorDisplayCoordX = colCoordsX[4]
+calculatorCoordZ = 0.6
+calculatorXDelta = 0.38
+calculatorZDelta = -0.38
+calculatorButtonWidth = 200
+calculatorButtonHeight = 200
+displayFontColor = colorCodes.Brown
+submitButtonActiveFontColor = colorCodes.Red
+submitButtonInactiveFontColor = colorCodes.Grey
+
+
+function getPlayerByColor(color)
+    for _, player in pairs(players) do
+        if player.color == color then
+            return player
+        end
+    end
+
+    return nil
+end
+
+function initialisePlayers()
+    -- create the player names
+    seatedColors = getSeatedPlayers()
+    print("seatedPlayers = ", dump(seatedColors))
+    if debug then
+        seatedColors = {'White', 'Purple', 'Blue', 'Green', 'Red', 'Yellow'} -- For debugging, fakes players at table
+    end
+
+    if #seatedColors == 0 then
+        printToAll('Players must be seated in order for this tool to be used.', {1,0.5,0.5})
+        return false
+    end
+
+    for index, playerColor in pairs(seatedColors) do
+        players[index] = {
+            color = playerColor,
+            name = string.sub(getPlayerName(playerColor), 1, characterLimit)
+        }
+    end
+
+    return true
+end
+
+function spawnAll()
+
+    if not initialisePlayers() then
+        return
+    end
+
+    createPlayerColumn()
+
+    print("action col")
+    createActionColumn()
+
+    print("calculator")
+    createCalculator()
+end
+
+-- execute the actions
+
+function validateActionIssueShares(triggeringPlayer, activePlayer, number)
+    -- TODO: check if this would put state over 15
+    return true
+end
+
+function executeActionIssueShares(triggeringPlayer, activePlayer, number)
+
+    local absolute = math.abs(number)
+    local deltaMoney = number * 5
+
+    -- get the current state
+    local currentPlayerMoney = 0
+    local currentSharesIssued = 0
+
+    newPlayerMoney = currentPlayerMoney + deltaMoney
+    newPlayerSharesIssued = currentSharesIssued + number
+
+    local phrasing = ( absolute == 1 and " share" or "shares" )
+
+    if number < 0 then
+        printToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d (%s)",
+                                activePlayer.name, number, phrasing, newPlayerSharesIssued,
+                                deltaMoney, triggeringPlayer.name), colorCodes[activePlayer.color])
+    else
+        printToAll(string.format("%s issues %d %s (now %d) for $%d (%s)",
+                                activePlayer.name, number, phrasing, newPlayerSharesIssued,
+                                deltaMoney, triggeringPlayer.name), colorCodes[activePlayer.color])
+    end
+end
+
+function executeCurrentAction(triggeringColor)
+    action = actions[activeAction]
+    suffix = string.gsub(action.label, ' ', '')
+
+    validateFunctionName = 'validateAction' .. suffix
+    executeFunctionName = 'executeAction' .. suffix
+
+    triggeringPlayer = getPlayerByColor(triggeringColor)
+    activePlayer = players[activePlayer]
+    currentDisplayValue = getCurrentDisplayValue()
+
+    print("validateFunctionName=", validateFunctionName)
+    if not _G[validateFunctionName](triggeringPlayer, activePlayer, currentDisplayValue) then
+        return false
+    end
+
+    _G[executeFunctionName](triggeringPlayer, activePlayer, currentDisplayValue)
+
+    return true
+end
+
+-- end execution of actions
+
+function calcNumberClicked(obj, color, newNum)
+    local currentDisplay = buttonParams.calcDisplay.label
+    buttonParams.calcDisplay.label = currentDisplay .. newNum
+    self.editButton(buttonParams.calcDisplay)
+    checkForSubmittableChange()
+end
+
+function getCurrentDisplayValue()
+    local currentDisplay = buttonParams.calcDisplay.label
+    if currentDisplay == '' or currentDisplay == '-' then
+        return 0
+    end
+
+    return tonumber(currentDisplay)
+end
+
+function calcClickNegate(obj, color)
+
+    local currentDisplay = buttonParams.calcDisplay.label
+
+    if isNegated then
+        buttonParams.calcDisplay.label = string.sub(currentDisplay, 2)
+    else
+        buttonParams.calcDisplay.label = '-' .. currentDisplay
+    end
+
+    self.editButton(buttonParams.calcDisplay)
+    isNegated = not isNegated
+    checkForSubmittableChange()
+end
+
+function clearDisplay()
+    buttonParams.calcDisplay.label = ''
+    self.editButton(buttonParams.calcDisplay)
+    checkForSubmittableChange()
+end
+
+function calcClickClear(obj, color)
+    clearDisplay()
+end
+
+function checkForSubmittableChange()
+    local newSubmittable = isSubmittable()
+
+    print("newSubmittable=",newSubmittable)
+    if newSubmittable != submittable then
+        if newSubmittable then
+            buttonParams.submit.font_color = submitButtonActiveFontColor
+        else
+            buttonParams.submit.font_color = submitButtonInactiveFontColor
+        end
+
+        print("would change, ", dump(buttonParams.submit))
+
+        self.editButton({index = buttonParams.submit.index, font_color=buttonParams.submit.font_color})
+
+        submittable = newSubmittable
+    end
+end
+
+function isSubmittable()
+    if activePlayer == 0 then return false end
+    if activeAction == 0 then return false end
+
+    local value = getCurrentDisplayValue()
+
+    return value != 0
+end
+
+function displayClick(obj, color)
+    printToColor("Don't be silly, you can't click the display", color, colorCodes.Orange)
+end
+
+function submitClick(obj, color)
+    if not submittable then
+        local message = "Can't submit: "
+        if activePlayer == 0 then
+            message = message .. "No player selected"
+        elseif activeAction == 0 then
+            message = message .. "No action selected"
+        elseif getCurrentDisplayValue() == 0 then
+            message = message .. "No value entered"
+        else
+            message = message .. "We're very confused"
+        end
+
+        printToColor(message, color, colorCodes.Red)
+
+        return
+    end
+
+    -- execute the action
+    if executeCurrentAction(color) then
+        clearControls()
+    end
+end
+
+function clearControls()
+    activeAction = 0
+    activePlayer = 0
+
+    clearDisplay()
+    refreshActions()
+    refreshPlayerNames()
+end
+
+function createCalculator()
+    local leftmostX = calculatorCoordX
+    local bottomZ = calculatorCoordZ
+
+    local deltaX = calculatorXDelta
+    local deltaZ = calculatorZDelta
+
+    -- creating a 3x4 grid of buttons for calculator
+    -- bottom row is -, 0, clr
+    -- numbers 1-9 form the top 3x3 grid
+    local numRows = 4
+    local numCols = 3
+
+    function getXZ(index)
+        local row = math.floor((index - 1) / numCols)
+        local col = index - (row * numCols)
+
+        local xCoord = leftmostX + ( col * deltaX )
+        local zCoord = bottomZ + ( row * deltaZ )
+
+        return xCoord, zCoord
+    end
+
+    for i=0,9 do
+        -- create a new global function
+        _G['calcClick' .. i] = function(obj, col)
+            -- that simply calls our real target function
+            calcNumberClicked(obj, col, i)
+        end
+    end
+
+    local xCoord
+    local zCoord
+
+    for i=1,12 do
+
+        xCoord, zCoord = getXZ(i)
+
+        if i == 1 then
+            params = {label='-', click_function='calcClickNegate', function_owner=self,
+                      position = {xCoord, buttonYCoord, zCoord},
+                      width=calculatorButtonWidth, height=calculatorButtonHeight,
+                      font_size=calculatorFontSize }
+
+            createButton(params)
+        elseif i == 2 then
+
+            params = {label='0', click_function='calcClick0', function_owner=self,
+                      position = {xCoord, buttonYCoord, zCoord},
+                      width=calculatorButtonWidth, height=calculatorButtonHeight,
+                      font_size=calculatorFontSize }
+
+            createButton(params)
+        elseif i == 3 then
+
+            params = {label='CLR', click_function='calcClickClear', function_owner=self,
+                      position = {xCoord, buttonYCoord, zCoord},
+                      width=calculatorButtonWidth, height=calculatorButtonHeight,
+                      font_size=calculatorFontSize * 0.75 }
+
+            createButton(params)
+        else
+            num = i-3
+
+            params = {label=num, click_function='calcClick'..num, function_owner=self,
+                      position = {xCoord, buttonYCoord, zCoord},
+                      width=calculatorButtonWidth, height=calculatorButtonHeight,
+                      font_size=calculatorFontSize }
+
+            createButton(params)
+        end
+    end
+
+    -- create the display and submit buttons -- which are in the next column
+    xCoord = calculatorDisplayCoordX
+    _, zCoord = getXZ(9)
+
+    buttonParams['calcDisplay'] = {label='', click_function='displayClick', function_owner=self,
+              position = {xCoord, buttonYCoord, zCoord},
+              width=calculatorButtonWidth * 2, height=calculatorButtonHeight,
+              font_color=displayFontColor,
+              font_size=calculatorFontSize }
+
+    createButton(buttonParams['calcDisplay'])
+
+    _, zCoord = getXZ(6)
+
+    buttonParams['submit'] = {label='Submit', click_function='submitClick', function_owner=self,
+              position = {xCoord, buttonYCoord, zCoord},
+              width=calculatorButtonWidth * 2, height=calculatorButtonHeight,
+              font_color=submitButtonInactiveFontColor,
+              font_size=calculatorFontSize * 0.75 }
+
+    createButton(buttonParams['submit'])
+end
+
+function createPlayerColumn()
+    playerInactiveBackgroundColor = colorCodes['Grey']
+    playerActiveBackgroundColor = colorCodes['Black']
+
+    -- first column: six rows of player names
+    local playersCoords = {}
+    for i=1,6 do
+        playersCoords[i] = {colCoordsX[1], buttonYCoord, playerNameRow1CoordZ + (playerNameRowCoordZDelta * (i-1) )}
+    end
+
+    -- populate the player names
+    for i, v in pairs(players) do
+        -- create a new global function
+        _G['nameClickFunction' .. i] = function(obj, col)
+           -- that simply calls our real target function
+           setActivePlayerName(obj, col, i)
+        end
+
+        params = {label=v.name, click_function='nameClickFunction' .. i, function_owner=self,
+                  position = playersCoords[i], width=800, height=200,
+                  color = playerInactiveBackgroundColor,
+                  font_color = colorCodes[v.color],
+                  font_size=playerNameFontSize }
+        players[i]['nameButton'] = createButton(params)
+    end
+end
+
+function setActivePlayerName(obj, col, i)
+    print("setActivePlayerName,obj=",dump(obj),", col=", dump(col), ", i=", dump(i))
+
+    -- loop over all of the players, set all to default background and make one active
+    activePlayer = i
+
+    refreshPlayerNames()
+end
+
+function refreshPlayerNames()
+    --printAllButtons()
+
+    for index, player in ipairs(players) do
+        --print("checking player ", dump(player))
+        if index == activePlayer then
+            self.editButton({index = player['nameButton'], color=playerActiveBackgroundColor})
+        else
+            self.editButton({index = player['nameButton'], color=playerInactiveBackgroundColor})
+        end
+    end
+
+    checkForSubmittableChange()
+end
+
+-- actions
+function createActionColumn()
+    for i, v in ipairs(actions) do
+        _G['actionClickFunction' .. i] = function(obj, col)
+            setActiveAction(obj, col, i)
+        end
+
+        local zCoord = actionRow1CoordZ + ( (i - 1) * actionRowCoordZDelta )
+        params = {label=v.label, click_function='actionClickFunction' .. i, function_owner=self,
+                  position = {actionCoordX, buttonYCoord, zCoord},
+                  width=actionButtonWidth, height=actionButtonHeight,
+                  color = actionInactiveBackgroundColor,
+                  font_color = actionFont,
+                  font_size=actionFontSize }
+
+        actions[i]['button'] = createButton(params)
+    end
+end
+
+function setActiveAction(obj, col, i)
+
+    -- loop over all of the actions, set all to default background and make one active
+    activeAction = i
+
+    refreshActions()
+end
+
+function refreshActions()
+    --printAllButtons()
+
+    for index, action in ipairs(actions) do
+        if index == activeAction then
+            self.editButton({index = action['button'], color=actionActiveBackgroundColor})
+        else
+            self.editButton({index = action['button'], color=actionInactiveBackgroundColor})
+        end
+    end
+
+    checkForSubmittableChange()
+end
+
+--[[
+  Helper methods from my library --
+  ]]--
+
+function getPlayerName(color)
+    playerName = Player[color].steam_name
+    if playerName == nil then
+        return color
+    else
+        return playerName
+    end
+end
+
+function dump(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dump(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
+
+function createButton(params)
+    params.index = currIndex
+    params.created = true
+    self.createButton(params)
+    currIndex = currIndex + 1
+    return params.index
+end
+
+
+function printAllButtons()
+    allButtons = self.getButtons()
+
+    for i, t in pairs(allButtons) do
+        print ("button, i=",i,", t=", t)
+        for k,v in pairs(t) do
+            print("    k=", k, ", v=", v)
+        end
+    end
+end
+
+function noop()
+end
+
+--[[
+  End helper methods from my library --
+  ]]--
