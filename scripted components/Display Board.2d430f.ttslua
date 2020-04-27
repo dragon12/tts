@@ -1,0 +1,292 @@
+
+
+--[[
+ Age of Steam control board by dragon12
+  ]]--
+
+--[[
+  Helper tables and methods from my library --
+  ]]--
+
+colorCodes = {
+    White = {r=1, g=1, b=1},
+    Brown = {r=0.443, g=0.231, b=0.09},
+    Red = {r=0.856, g=0.1, b=0.094},
+    Orange = {r=0.956, g=0.392, b=0.113},
+    Yellow = {r=0.905, g=0.898, b=0.172},
+    Green = {r=0.192, g=0.701, b=0.168},
+    Teal = {r=0.129, g=0.694, b=0.607},
+    Blue = {r=0.118, g=0.53, b=1},
+    Purple = {r=0.627, g=0.125, b=0.941},
+    Pink = {r=0.96, g=0.439, b=0.807},
+    Grey = {r=0.5, g=0.5, b=0.5},
+    Black = {r=0.25, g=0.25, b=0.25},
+}
+
+function getPlayerName(color)
+    playerName = Player[color].steam_name
+    if playerName == nil then
+        return color
+    else
+        return playerName
+    end
+end
+
+function dump(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dump(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
+
+function createButton(params)
+    params.index = currIndex
+    params.created = true
+    self.createButton(params)
+    currIndex = currIndex + 1
+    return params.index
+end
+
+
+function printAllButtons()
+    allButtons = self.getButtons()
+
+    for i, t in pairs(allButtons) do
+        print ("button, i=",i,", index=", t.index, ", label=", t.label)
+    end
+end
+
+function noop()
+end
+
+--[[
+  End helper tables and methods from my library --
+  ]]--
+
+
+--Changes maximum character count for names
+characterLimit = 14
+
+debug = false
+players = {}
+
+
+function onSave()
+    --[[
+    if players then
+        if #players != 0 then
+            local data_to_save = players
+            print("Trying to save: ", dump(players))
+            saved_data = JSON.encode(data_to_save)
+            return saved_data
+        end
+    end
+    --]]
+end
+
+function onload(saved_data)
+
+    --This decodes saved_data if it exists to a table name loaded_data
+    if saved_data != nil then
+        loaded_data = JSON.decode(saved_data)
+    else
+        loaded_data = nil
+    end
+
+    -- todo
+    initAll()
+end
+
+-- todo this will be called from elsewhere
+function initAll()
+    currIndex=0
+    spawnAll()
+end
+
+------ Set up all of the display stuff
+defaultFontSize = 150
+headerFontSize = defaultFontSize
+summaryFontSize = defaultFontSize * 0.75
+
+buttonYCoord = 0.2
+
+columnDetails = {
+    player={label='Player', column=1, fontMultiplier=1},
+    cash={label='Cash', column=2, fontMultiplier=0.9, startingValue='$10'},
+    shares={label='Shares\nIssued', column=3, fontMultiplier=0.75, startingValue=2},
+    locomotive={label='Engine', column=4, fontMultiplier=0.8, startingValue=1},
+    income={label='Income', column=5, fontMultiplier=0.9, startingValue=0},
+}
+
+-- col1: Name
+-- col2: Cash
+-- col3: Shares Issued
+-- col4: Locomotive
+-- col5: Income
+colCoordsX = {
+    -2.2,   -- Name
+    -1.2,   -- Cash
+    -0.4,    -- Shares Issued
+    0.5,    -- Locomotive
+    1.6,    -- Income
+}
+
+-- 7 rows; first one is slightly larger
+headerRowCoordZ = -1.0
+topSummaryRowCoordZ = headerRowCoordZ + 0.4
+summaryRowCoordZDelta = 0.34
+
+function getPlayerByColor(color)
+    for _, player in pairs(players) do
+        if player.color == color then
+            return player
+        end
+    end
+    return nil
+end
+
+function getMoney(player)
+    return string.sub(player.values[columnDetails.cash.column], 2)
+end
+
+function getShares(player)
+    return player.values[columnDetails.shares.column]
+end
+
+function updateMoney(player, money)
+    updateDisplay(player, columnDetails.cash.column, '$'..money)
+end
+
+function updateShares(player, shares)
+    updateDisplay(player, columnDetails.shares.column, shares)
+end
+
+function updateDisplay(player, colIdx, val)
+    player.values[colIdx] = val
+    self.editButton({index = player.buttons[colIdx], label=val})
+end
+
+------ API -----
+
+-- receives 'player'
+-- return shares
+function getInfoShares(t)
+    player = getPlayerByColor(t.player.color)
+    return getShares(player)
+end
+
+function getInfoMoney(t)
+    player = getPlayerByColor(t.player.color)
+    return getMoney(player)
+end
+
+-- receives player, money
+-- return nothing
+function executeUpdateMoney(t)
+    player = getPlayerByColor(t.player.color)
+    updateMoney(player, t.money)
+end
+
+-- receives player, shares
+-- return nothing
+function executeUpdateShares(t)
+    player = getPlayerByColor(t.player.color)
+    updateShares(player, t.shares)
+end
+------ END API ------
+
+function initialisePlayers()
+    -- create the player names
+    seatedColors = getSeatedPlayers()
+    print("seatedPlayers = ", dump(seatedColors))
+    if debug then
+        seatedColors = {'White', 'Purple', 'Blue', 'Green', 'Red', 'Yellow'} -- For debugging, fakes players at table
+    end
+
+    if #seatedColors == 0 then
+        printToAll('Players must be seated in order for this tool to be used.', {1,0.5,0.5})
+        return false
+    end
+
+    for index, playerColor in pairs(seatedColors) do
+        players[index] = {
+            color = playerColor,
+            name = string.sub(getPlayerName(playerColor), 1, characterLimit)
+        }
+    end
+
+    return true
+end
+
+function spawnAll()
+
+    if not initialisePlayers() then
+        return
+    end
+
+
+    function getXZ(row, col)
+        local xCoord = colCoordsX[col]
+        local zCoord = topSummaryRowCoordZ + summaryRowCoordZDelta * ( row - 1 )
+        return xCoord, zCoord
+    end
+
+    -- create each row in turn
+
+    -- header row, static
+    for _,v in pairs(columnDetails) do
+        local xCoord = colCoordsX[v.column]
+        local zCoord = headerRowCoordZ
+
+        local params = {label=v.label, click_function='noop', function_owner=self,
+                  position = {xCoord, buttonYCoord, zCoord},
+                  width=0, height=0,
+                  font_color = colorCodes[v.color],
+                  font_size=headerFontSize * v.fontMultiplier }
+
+        local idx = createButton(params)
+        print("created button idx ",idx," with label ", v.label)
+    end
+
+    local xCoord = 0
+    local zCoord = 0
+    local params = {click_function='noop', function_owner=self,
+              width=0, height=0,
+              font_size=summaryFontSize }
+
+    for i, v in pairs(players) do
+
+        -- name
+        xCoord, zCoord = getXZ(i, columnDetails.player.column)
+        params.label = v.name
+        params.position = {xCoord, buttonYCoord, zCoord}
+        params.font_color = colorCodes[v.color]
+        players[i]['nameButton'] = createButton(params)
+
+        players[i]['buttons'] = {}
+        players[i]['values'] = {}
+
+        for _, colDetails in pairs(columnDetails) do
+            print("handling player column: ", dump(colDetails))
+            if colDetails.column != 1 then -- skip player column
+                xCoord, zCoord = getXZ(i, colDetails.column)
+                params.label = colDetails.startingValue
+                params.position = {xCoord, buttonYCoord, zCoord}
+                players[i].values[colDetails.column] = colDetails.startingValue
+
+                local index = createButton(params)
+                players[i].buttons[colDetails.column] = index
+                if debug then
+                    print("created button for ", v.color, ", name=", colDetails.label, ", index=", index)
+                end
+            end
+        end
+        printAllButtons()
+    end
+end

@@ -1,5 +1,6 @@
 
 
+
 --[[
  Age of Steam control board by dragon12
   ]]--
@@ -119,7 +120,6 @@ function getPlayerByColor(color)
             return player
         end
     end
-
     return nil
 end
 
@@ -163,22 +163,31 @@ end
 
 -- execute the actions
 
-function validateActionIssueShares(triggeringPlayer, activePlayer, number)
-    -- TODO: check if this would put state over 15
-    return true
-end
+-- todo tidy this up, dynamically find the display board
+displayBoardGuid = '2d430f'
 
 function executeActionIssueShares(triggeringPlayer, activePlayer, number)
 
     local absolute = math.abs(number)
     local deltaMoney = number * 5
 
+    local displayBoard = getObjectFromGUID(displayBoardGuid)
+
     -- get the current state
-    local currentPlayerMoney = 0
-    local currentSharesIssued = 0
+    local currentPlayerMoney = displayBoard.call("getInfoMoney", {player=activePlayer})
+    local currentSharesIssued = displayBoard.call("getInfoShares", {player=activePlayer})
 
     newPlayerMoney = currentPlayerMoney + deltaMoney
     newPlayerSharesIssued = currentSharesIssued + number
+
+    if newPlayerSharesIssued > 15 or newPlayerSharesIssued < 2 then
+        print(string.format("Invalid update: %d is not a valid number of issued shares", newPlayerSharesIssued))
+        return false
+    end
+
+    -- send call to the other board
+    displayBoard.call("executeUpdateMoney", {player=activePlayer,money=newPlayerMoney})
+    displayBoard.call("executeUpdateShares", {player=activePlayer,shares=newPlayerSharesIssued})
 
     local phrasing = ( absolute == 1 and " share" or "shares" )
 
@@ -191,27 +200,21 @@ function executeActionIssueShares(triggeringPlayer, activePlayer, number)
                                 activePlayer.name, number, phrasing, newPlayerSharesIssued,
                                 deltaMoney, triggeringPlayer.name), colorCodes[activePlayer.color])
     end
+
+    return true
 end
 
 function executeCurrentAction(triggeringColor)
     action = actions[activeAction]
     suffix = string.gsub(action.label, ' ', '')
 
-    validateFunctionName = 'validateAction' .. suffix
     executeFunctionName = 'executeAction' .. suffix
 
     triggeringPlayer = getPlayerByColor(triggeringColor)
     activePlayer = players[activePlayer]
     currentDisplayValue = getCurrentDisplayValue()
 
-    print("validateFunctionName=", validateFunctionName)
-    if not _G[validateFunctionName](triggeringPlayer, activePlayer, currentDisplayValue) then
-        return false
-    end
-
-    _G[executeFunctionName](triggeringPlayer, activePlayer, currentDisplayValue)
-
-    return true
+    return _G[executeFunctionName](triggeringPlayer, activePlayer, currentDisplayValue)
 end
 
 -- end execution of actions
@@ -260,15 +263,12 @@ end
 function checkForSubmittableChange()
     local newSubmittable = isSubmittable()
 
-    print("newSubmittable=",newSubmittable)
     if newSubmittable != submittable then
         if newSubmittable then
             buttonParams.submit.font_color = submitButtonActiveFontColor
         else
             buttonParams.submit.font_color = submitButtonInactiveFontColor
         end
-
-        print("would change, ", dump(buttonParams.submit))
 
         self.editButton({index = buttonParams.submit.index, font_color=buttonParams.submit.font_color})
 
@@ -310,6 +310,8 @@ function submitClick(obj, color)
     -- execute the action
     if executeCurrentAction(color) then
         clearControls()
+    else
+        print("action failed")
     end
 end
 
