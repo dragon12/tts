@@ -1,6 +1,5 @@
 
 
-
 --[[
  Age of Steam control board by dragon12
   ]]--
@@ -41,24 +40,40 @@ submittable = false
 debug = true
 players = {}
 
-buttonParams = {
-    calcDisplay = {},
-    submit = {},
-}
-
 function onSave()
-    -- todo
+    if players then
+        if #players != 0 then
+            local data_to_save = players
+            saved_data = JSON.encode(data_to_save)
+            return saved_data
+        end
+    end
 end
+
+loaded_data = {}
 
 function onload(saved_data)
-    -- todo
-    initAll()
-end
+    print("onload control board: ", dump(saved_data))
 
--- todo this will be called from elsewhere
-function initAll()
-    currIndex=0
-    spawnAll()
+    -- if we've already been initialised then populate all of the things
+    if saved_data != nil then
+        loaded_data = JSON.decode(saved_data)
+    else
+        loaded_data = nil
+    end
+    --loaded_data=nil
+
+    currIndex = 0
+
+    if loaded_data == nil then
+        -- nothing has been loaded; spawn our Start button
+        players = {}
+        createInitButton() -- this will eventually initialise players
+    else
+        players = loaded_data
+        currIndex = 0
+        spawnAll()
+    end
 end
 
 
@@ -97,7 +112,7 @@ actions = {
     {label='Issue Shares'},
     {label='Gain Income'},
     {label='Locomotive'},
-    {label='Pay Bid'},
+    {label='Pay Cash'},
 }
 
 -- calculator
@@ -113,6 +128,35 @@ displayFontColor = colorCodes.Brown
 submitButtonActiveFontColor = colorCodes.Red
 submitButtonInactiveFontColor = colorCodes.Grey
 
+-- end of turn display
+endOfTurnCoordX = 4
+endOfTurnCoordZ = 0
+endOfTurnWidth = 800
+endOfTurnHeight = 400
+endOfTurnFontSize = defaultFontSize * 0.8
+endOfTurnFontColor = colorCodes.Yellow
+endOfTurnBackgroundColor = colorCodes.Red
+
+endOfTurnYesCoordX = endOfTurnCoordX - 1
+endOfTurnNoCoordX = endOfTurnCoordX + 1
+endOfTurnConfirmsCoordZ = endOfTurnCoordZ + 1
+endOfTurnConfirmsWidth = 300
+endOfTurnConfirmsHeigth = 200
+
+buttonParams = {
+    calcDisplay = {},
+    submit = {},
+    init = {},
+    executeEndOfTurn = nil, -- this one will replace init after we're done
+    confirmEndOfTurnYes = {label='Confirm', click_function='confirmEndOfTurn', function_owner=self,
+                            position={endOfTurnYesCoordX, buttonYCoord, endOfTurnConfirmsCoordZ},
+                            width=endOfTurnConfirmsWidth, height=endOfTurnConfirmsHeight,
+                            color=colorCodes.Red, fontColor=colorCodes.Yellow, },
+    confirmEndOfTurnNo = {label='Cancel', click_function='cancelEndOfTurn', function_owner=self,
+                            position={endOfTurnNoCoordX, buttonYCoord, endOfTurnConfirmsCoordZ},
+                            width=endOfTurnConfirmsWidth, height=endOfTurnConfirmsHeight,
+                            color=colorCodes.Black, fontColor=colorCodes.White, },
+}
 
 function getPlayerByColor(color)
     for _, player in pairs(players) do
@@ -125,8 +169,7 @@ end
 
 function initialisePlayers()
     -- create the player names
-    seatedColors = getSeatedPlayers()
-    print("seatedPlayers = ", dump(seatedColors))
+    local seatedColors = getSeatedPlayers()
     if debug then
         seatedColors = {'White', 'Purple', 'Blue', 'Green', 'Red', 'Yellow'} -- For debugging, fakes players at table
     end
@@ -146,19 +189,93 @@ function initialisePlayers()
     return true
 end
 
-function spawnAll()
+function createInitButton()
+    buttonParams.init = {label='Click Once Seated\nto populate players',
+              click_function='initialiseAndSpawnAll', function_owner=self,
+              position = {0, buttonYCoord, 0},
+              width=500,height=500,
+              font_size=defaultFontSize
+          }
+
+    createButton(buttonParams.init)
+end
+
+function initialiseAndSpawnAll()
 
     if not initialisePlayers() then
         return
     end
 
+    -- successful initialisation, copy the init button to executeEndOfTurn
+    buttonParams.executeEndOfTurn = buttonParams.init
+    buttonParams.init = nil
+
+    spawnAll()
+end
+
+
+function spawnAll()
+
     createPlayerColumn()
-
-    print("action col")
     createActionColumn()
-
-    print("calculator")
     createCalculator()
+    createEndOfTurnButton()
+end
+
+function createEndOfTurnButton()
+    -- if we have params already then we edit it, otherwise we create it (i.e. we're loading pre-populated)
+
+    local indexToEdit = 0
+    if buttonParams.executeEndOfTurn != nil then
+        indexToEdit = button.executeEndOfTurn.index
+    end
+
+    buttonParams.executeEndOfTurn = {
+        index=indexToEdit,
+        label='Execute\nEnd Of Turn',
+        click_function='checkConfirmEndOfTurn', function_owner=self,
+        position={endOfTurnCoordX,buttonYCoord,endOfTurnCoordZ},
+        width=endOfTurnWidth, height=endOfTurnHeight,
+        font_size=endOfTurnFontSize, font_color=endOfTurnFontColor,
+        color=endOfTurnBackgroundColor,
+    }
+
+    if indexToEdit == 0 then
+        createButton(buttonParams.executeEndOfTurn)
+    else
+        self.editButton(buttonParams.executeEndOfTurn)
+    end
+
+    -- create the two confirm buttons, invisible for now
+    buttonParams.confirmEndOfTurnYes.label = ''
+    buttonParams.confirmEndOfTurnYes.width = 0
+    buttonParams.confirmEndOfTurnYes.heigth = 0
+    buttonParams.confirmEndOfTurnYes.position = {0,-1,0}
+    createButton(buttonParams.confirmEndOfTurnYes)
+
+    buttonParams.confirmEndOfTurnNo.label = ''
+    buttonParams.confirmEndOfTurnNo.width = 0
+    buttonParams.confirmEndOfTurnNo.heigth = 0
+    buttonParams.confirmEndOfTurnNo.position = {0,-1,0}
+    createButton(buttonParams.confirmEndOfTurnNo)
+end
+
+function checkConfirmEndOfTurn()
+    buttonParams.executeEndOfTurn.width = 0
+    buttonParams.executeEndOfTurn.heigth = 0
+    self.editButton(buttonParams.executeEndOfTurn)
+
+    buttonParams.confirmEndOfTurnYes.label = 'Confirm'
+    buttonParams.confirmEndOfTurnYes.position={endOfTurnYesCoordX, buttonYCoord, endOfTurnConfirmsCoordZ}
+    buttonParams.confirmEndOfTurnYes.width=endOfTurnConfirmsWidth
+    buttonParams.confirmEndOfTurnYes.height=endOfTurnConfirmsHeight
+    self.editButton(buttonParams.confirmEndOfTurnYes)
+
+    buttonParams.confirmEndOfTurnNo.label = 'Cancel'
+    buttonParams.confirmEndOfTurnNo.position={endOfTurnNoCoordX, buttonYCoord, endOfTurnConfirmsCoordZ}
+    buttonParams.confirmEndOfTurnNo.width=endOfTurnConfirmsWidth
+    buttonParams.confirmEndOfTurnNo.height=endOfTurnConfirmsHeight
+    self.editButton(buttonParams.confirmEndOfTurnNo)
 end
 
 -- execute the actions
@@ -174,47 +291,164 @@ function executeActionIssueShares(triggeringPlayer, activePlayer, number)
     local displayBoard = getObjectFromGUID(displayBoardGuid)
 
     -- get the current state
-    local currentPlayerMoney = displayBoard.call("getInfoMoney", {player=activePlayer})
-    local currentSharesIssued = displayBoard.call("getInfoShares", {player=activePlayer})
+    local currentPlayerMoney = displayBoard.call("ext_getInfoMoney", {player=activePlayer})
+    local currentSharesIssued = displayBoard.call("ext_getInfoShares", {player=activePlayer})
 
-    newPlayerMoney = currentPlayerMoney + deltaMoney
-    newPlayerSharesIssued = currentSharesIssued + number
+    local newPlayerMoney = currentPlayerMoney + deltaMoney
+    local newPlayerSharesIssued = currentSharesIssued + number
 
     if newPlayerSharesIssued > 15 or newPlayerSharesIssued < 2 then
-        print(string.format("Invalid update: %d is not a valid number of issued shares", newPlayerSharesIssued))
+        printToAll(string.format("Invalid update: %d is not a valid number of issued shares", newPlayerSharesIssued), colorCodes.Red)
         return false
     end
 
     -- send call to the other board
-    displayBoard.call("executeUpdateMoney", {player=activePlayer,money=newPlayerMoney})
-    displayBoard.call("executeUpdateShares", {player=activePlayer,shares=newPlayerSharesIssued})
+    displayBoard.call("ext_executeUpdateMoney", {player=activePlayer,money=newPlayerMoney})
+    displayBoard.call("ext_executeUpdateShares", {player=activePlayer,shares=newPlayerSharesIssued})
 
     local phrasing = ( absolute == 1 and " share" or "shares" )
 
     if number < 0 then
-        printToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d (%s)",
-                                activePlayer.name, number, phrasing, newPlayerSharesIssued,
+        broadcastToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d (%s)",
+                                activePlayer.name, absolute, phrasing, newPlayerSharesIssued,
                                 deltaMoney, triggeringPlayer.name), colorCodes[activePlayer.color])
     else
-        printToAll(string.format("%s issues %d %s (now %d) for $%d (%s)",
-                                activePlayer.name, number, phrasing, newPlayerSharesIssued,
+        broadcastToAll(string.format("%s issues %d %s (now %d) for $%d (%s)",
+                                activePlayer.name, absolute, phrasing, newPlayerSharesIssued,
                                 deltaMoney, triggeringPlayer.name), colorCodes[activePlayer.color])
     end
 
     return true
 end
 
+function executeActionGainIncome(triggeringPlayer, activePlayer, number)
+
+    -- increase income by X
+    -- can't go below 0
+    -- can't change by more than 6
+    if math.abs(number) > 6 then
+        printToAll(string.format("Invalid update: income can't change by more than 6"), colorCodes.Red)
+        return false
+    end
+    local displayBoard = getObjectFromGUID(displayBoardGuid)
+
+    -- get the current state
+    local currentPlayerIncome = displayBoard.call("ext_getInfoIncome", {player=activePlayer})
+
+    local newPlayerIncome = currentPlayerIncome + number
+
+    if newPlayerIncome < 0 then
+        printToAll(string.format("Invalid update: %d would not be a valid income", newPlayerIncome), colorCodes.Red)
+        return false
+    end
+
+    -- send call to the other board
+    displayBoard.call("ext_executeUpdateIncome", {player=activePlayer,income=newPlayerIncome})
+
+    if number < 0 then
+        broadcastToAll(string.format("WARN: %s's income reduces by %d (now %d) (%s)",
+                                activePlayer.name, math.abs(number), newPlayerIncome, triggeringPlayer.name),
+                                colorCodes[activePlayer.color])
+
+    else
+        broadcastToAll(string.format("%s's income increases by %d (now %d) (%s)",
+                                activePlayer.name, number, newPlayerIncome, triggeringPlayer.name),
+                                colorCodes[activePlayer.color])
+    end
+
+    return true
+end
+
+function executeActionLocomotive(triggeringPlayer, activePlayer, number)
+
+    -- increase locomotive by X
+    -- can't go below 1
+    -- can't go above 6
+    if math.abs(number) != 1 then
+        printToAll(string.format("Invalid update: locomotive can only change by 1"), colorCodes.Red)
+        return false
+    end
+
+    local displayBoard = getObjectFromGUID(displayBoardGuid)
+
+    -- get the current state
+    local currentPlayerLoco = displayBoard.call("ext_getInfoLocomotive", {player=activePlayer})
+
+    local newPlayerLoco = currentPlayerLoco + number
+
+    if newPlayerLoco < 1 or newPlayerLoco > 6 then
+        printToAll(string.format("Invalid update: %d would not be a valid locomotive", newPlayerLoco), colorCodes.Red)
+        return false
+    end
+
+    -- send call to the other board
+    displayBoard.call("ext_executeUpdateLocomotive", {player=activePlayer,locomotive=newPlayerLoco})
+
+    if number < 0 then
+        broadcastToAll(string.format("WARN: %s's locomotive reduces by %d (now %d) (%s)",
+                                activePlayer.name, math.abs(number), newPlayerLoco, triggeringPlayer.name),
+                                colorCodes[activePlayer.color])
+
+    else
+        broadcastToAll(string.format("%s's locomotive increases by %d (now %d) (%s)",
+                                activePlayer.name, number, newPlayerLoco, triggeringPlayer.name),
+                                colorCodes[activePlayer.color])
+    end
+
+    return true
+end
+
+function executeActionPayCash(triggeringPlayer, activePlayer, number)
+
+    -- *decrease* cash by X
+    -- can't go below 0
+    number = -number
+
+    local displayBoard = getObjectFromGUID(displayBoardGuid)
+
+    -- get the current state
+    local currentPlayerCash = displayBoard.call("ext_getInfoMoney", {player=activePlayer})
+
+    local newPlayerCash = currentPlayerCash + number
+
+    if newPlayerCash < 0 then
+        printToAll(string.format("Invalid update: %d would not be a valid cash total", newPlayerCash), colorCodes.Red)
+        return false
+    end
+
+    -- send call to the other board
+    displayBoard.call("ext_executeUpdateMoney", {player=activePlayer,money=newPlayerCash})
+
+    if number > 0 then
+        broadcastToAll(string.format("WARN: %s's cash increases by $%d (now %d) (%s)",
+                                activePlayer.name, number, newPlayerCash, triggeringPlayer.name),
+                                colorCodes[activePlayer.color])
+
+    else
+        broadcastToAll(string.format("%s paid $%d (remaining $%d) (%s)",
+                                activePlayer.name, math.abs(number), newPlayerCash, triggeringPlayer.name),
+                                colorCodes[activePlayer.color])
+    end
+
+    return true
+end
+
 function executeCurrentAction(triggeringColor)
-    action = actions[activeAction]
-    suffix = string.gsub(action.label, ' ', '')
+    local action = actions[activeAction]
+    local suffix = string.gsub(action.label, ' ', '')
 
-    executeFunctionName = 'executeAction' .. suffix
+    local executeFunctionName = 'executeAction' .. suffix
 
-    triggeringPlayer = getPlayerByColor(triggeringColor)
-    activePlayer = players[activePlayer]
-    currentDisplayValue = getCurrentDisplayValue()
+    local triggeringPlayer = getPlayerByColor(triggeringColor)
+    local currentPlayer = players[activePlayer]
+    local currentDisplayValue = tonumber(getCurrentDisplayValue())
 
-    return _G[executeFunctionName](triggeringPlayer, activePlayer, currentDisplayValue)
+    if currentDisplayValue == 0 then
+        printToAll("Invalid update: must be non-zero", colorCodes.Red)
+        return false
+    end
+
+    return _G[executeFunctionName](triggeringPlayer, currentPlayer, currentDisplayValue)
 end
 
 -- end execution of actions
@@ -280,9 +514,7 @@ function isSubmittable()
     if activePlayer == 0 then return false end
     if activeAction == 0 then return false end
 
-    local value = getCurrentDisplayValue()
-
-    return value != 0
+    return getCurrentDisplayValue() != 0
 end
 
 function displayClick(obj, color)
@@ -318,6 +550,7 @@ end
 function clearControls()
     activeAction = 0
     activePlayer = 0
+    isNegated = false
 
     clearDisplay()
     refreshActions()

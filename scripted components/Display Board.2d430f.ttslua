@@ -1,5 +1,4 @@
 
-
 --[[
  Age of Steam control board by dragon12
   ]]--
@@ -73,9 +72,8 @@ end
 --Changes maximum character count for names
 characterLimit = 14
 
-debug = false
+debug = true
 players = {}
-
 
 function onSave()
     --[[
@@ -95,18 +93,16 @@ function onload(saved_data)
     --This decodes saved_data if it exists to a table name loaded_data
     if saved_data != nil then
         loaded_data = JSON.decode(saved_data)
+
+        -- we need to initialise all the buttons etc and restore the values
+
     else
+        -- no saved data so we're in initial state; we're waiting for the external call
         loaded_data = nil
     end
 
-    -- todo
-    initAll()
-end
-
--- todo this will be called from elsewhere
-function initAll()
-    currIndex=0
-    spawnAll()
+    -- todo remove this
+    ext_initAll()
 end
 
 ------ Set up all of the display stuff
@@ -120,8 +116,8 @@ columnDetails = {
     player={label='Player', column=1, fontMultiplier=1},
     cash={label='Cash', column=2, fontMultiplier=0.9, startingValue='$10'},
     shares={label='Shares\nIssued', column=3, fontMultiplier=0.75, startingValue=2},
-    locomotive={label='Engine', column=4, fontMultiplier=0.8, startingValue=1},
-    income={label='Income', column=5, fontMultiplier=0.9, startingValue=0},
+    locomotive={label='Locomotive', column=4, fontMultiplier=0.7, startingValue=1},
+    income={label='Income\nTrack', column=5, fontMultiplier=0.75, startingValue=0},
 }
 
 -- col1: Name
@@ -130,11 +126,11 @@ columnDetails = {
 -- col4: Locomotive
 -- col5: Income
 colCoordsX = {
-    -2.2,   -- Name
-    -1.2,   -- Cash
-    -0.4,    -- Shares Issued
-    0.5,    -- Locomotive
-    1.6,    -- Income
+    -2.1,   -- Name
+    -0.9,   -- Cash
+    0.1,    -- Shares Issued
+    1.1,    -- Locomotive
+    2.1,    -- Income
 }
 
 -- 7 rows; first one is slightly larger
@@ -159,6 +155,14 @@ function getShares(player)
     return player.values[columnDetails.shares.column]
 end
 
+function getIncome(player)
+    return player.values[columnDetails.income.column]
+end
+
+function getLocomotive(player)
+    return player.values[columnDetails.locomotive.column]
+end
+
 function updateMoney(player, money)
     updateDisplay(player, columnDetails.cash.column, '$'..money)
 end
@@ -167,44 +171,90 @@ function updateShares(player, shares)
     updateDisplay(player, columnDetails.shares.column, shares)
 end
 
+function updateIncome(player, income)
+    updateDisplay(player, columnDetails.income.column, income)
+end
+
+function updateLocomotive(player, locomotive)
+    updateDisplay(player, columnDetails.locomotive.column, locomotive)
+end
+
 function updateDisplay(player, colIdx, val)
     player.values[colIdx] = val
     self.editButton({index = player.buttons[colIdx], label=val})
 end
 
------- API -----
+--[[------------------------
+   API
+]]--------------------------
+
+function ext_initAll()
+    currIndex=0
+    spawnAll()
+end
 
 -- receives 'player'
 -- return shares
-function getInfoShares(t)
+function ext_getInfoShares(t)
     player = getPlayerByColor(t.player.color)
     return getShares(player)
 end
 
-function getInfoMoney(t)
+-- receives player
+-- returns money
+function ext_getInfoMoney(t)
     player = getPlayerByColor(t.player.color)
     return getMoney(player)
 end
 
+-- receives player
+-- returns income
+function ext_getInfoIncome(t)
+    player = getPlayerByColor(t.player.color)
+    return getIncome(player)
+end
+
+-- receives player
+-- returns locomotive
+function ext_getInfoLocomotive(t)
+    player = getPlayerByColor(t.player.color)
+    return getLocomotive(player)
+end
+
 -- receives player, money
 -- return nothing
-function executeUpdateMoney(t)
+function ext_executeUpdateMoney(t)
     player = getPlayerByColor(t.player.color)
     updateMoney(player, t.money)
 end
 
 -- receives player, shares
 -- return nothing
-function executeUpdateShares(t)
+function ext_executeUpdateShares(t)
     player = getPlayerByColor(t.player.color)
     updateShares(player, t.shares)
 end
+
+-- receives player, income
+-- return nothing
+function ext_executeUpdateIncome(t)
+    player = getPlayerByColor(t.player.color)
+    updateIncome(player, t.income)
+end
+
+-- receives player, locomotive
+-- return nothing
+function ext_executeUpdateLocomotive(t)
+    player = getPlayerByColor(t.player.color)
+    updateLocomotive(player, t.locomotive)
+end
+
+
 ------ END API ------
 
 function initialisePlayers()
     -- create the player names
     seatedColors = getSeatedPlayers()
-    print("seatedPlayers = ", dump(seatedColors))
     if debug then
         seatedColors = {'White', 'Purple', 'Blue', 'Green', 'Red', 'Yellow'} -- For debugging, fakes players at table
     end
