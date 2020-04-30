@@ -48,6 +48,7 @@ isNegated = false
 submittable = false
 
 debug = true
+verboseDebug = false
 printTriggeringPlayer=false
 players = {}
 currIndex = 0
@@ -65,7 +66,9 @@ end
 function onload(saved_data)
     if debug then
         if saved_data != nil then
-            --print("onload control board: ", dump(saved_data))
+            if verboseDebug then
+                print("onload control board: ", dump(saved_data))
+            end
         end
     end
 
@@ -369,6 +372,89 @@ displayBoardGuid = '2d430f'
 function doEndOfTurnUpkeep(obj, triggeringColor)
     local triggeringPlayer = getPlayerByColor(triggeringColor)
     broadcastToAll(string.format("End of turn upkeep starting, triggered by %s", triggeringPlayer.name), colorCodes.Purple)
+
+    -- ok, we need to iterate over each player and apply income and cash changes
+    for _, player in pairs(players) do
+        doEndOfTurnIncomeOnPlayer(player)
+    end
+
+    for _, player in pairs(players) do
+        doEndOfTurnSuppressionOnPlayer(player)
+    end
+end
+
+function doEndOfTurnSuppressionOnPlayer(player)
+    local displayBoard = getObjectFromGUID(displayBoardGuid)
+    local income = tonumber(displayBoard.call("ext_getInfoIncome", {player=player}))
+
+    local newIncome = income
+
+    if income <= 10 then
+        broadcastToAll(string.format("%s's income is %d, no suppression", player.name, income),
+                       colorCodes[player.color])
+    elseif income <= 21 then
+        newIncome = income - 2
+        broadcastToAll(string.format("%s's income is %d; reduces by 2 to %d", player.name, income, newIncome),
+                       colorCodes[player.color])
+    elseif income <= 31 then
+        newIncome = income - 4
+        broadcastToAll(string.format("%s's income is %d; reduces by 4 to %d", player.name, income, newIncome),
+                       colorCodes[player.color])
+    elseif income <= 41 then
+        newIncome = income - 6
+        broadcastToAll(string.format("%s's income is %d; reduces by 6 to %d", player.name, income, newIncome),
+                       colorCodes[player.color])
+    else
+        newIncome = income - 8
+        broadcastToAll(string.format("%s's income is %d; reduces by 8 to %d", player.name, income, newIncome),
+                       colorCodes[player.color])
+    end
+
+    if newIncome != income then
+        displayBoard.call("ext_executeUpdateIncome", {player=player,income=newIncome})
+    end
+end
+
+function doEndOfTurnIncomeOnPlayer(player)
+    if debug then
+        print(string.format("Starting end of turn on %s", player.name))
+    end
+
+    local displayBoard = getObjectFromGUID(displayBoardGuid)
+    local cash = tonumber(displayBoard.call("ext_getInfoMoney", {player=player}))
+    local income = tonumber(displayBoard.call("ext_getInfoIncome", {player=player}))
+    local shares = tonumber(displayBoard.call("ext_getInfoShares", {player=player}))
+    local loco = tonumber(displayBoard.call("ext_getInfoLocomotive", {player=player}))
+
+    local expenses = shares + loco
+
+    if income > expenses then
+        local delta = income - expenses
+        displayBoard.call("ext_executeUpdateMoney", {player=player,money=(cash + delta)})
+        broadcastToAll(string.format("%s gains $%d cash (%d - %d), now on $%d", player.name, delta, income, expenses, cash + delta),
+                       colorCodes[player.color])
+    elseif income < expenses then
+        -- we have to pay cash if we have enough
+        local delta = expenses - income
+        if delta <= cash then
+            displayBoard.call("ext_executeUpdateMoney", {player=player,money=(cash - delta)})
+            broadcastToAll(string.format("%s pays $%d cash (%d - %d), now on $%d", player.name, delta, income, expenses, cash - delta),
+                       colorCodes[player.color])
+        else
+            -- spend all the cash, and reduce income
+            local deltaIncome = delta - cash
+            displayBoard.call("ext_executeUpdateMoney", {player=player,money=0})
+            displayBoard.call("ext_executeUpdateIncome", {player=player,income=income-deltaIncome})
+            broadcastToAll(string.format("%s pays all their cash ($%d) and reduces income by %d (%d - %d), now on %d income", player.name, cash, deltaIncome, income, expenses, income - deltaIncome),
+                           colorCodes[player.color])
+            if deltaIncome > income then
+                broadcastToAll(string.format("!!!%s IS BANKRUPT!!!", player.name), colorCodes[player.color])
+            end
+            income = income - deltaIncome
+        end
+    else
+        broadcastToAll(string.format("%s income and expenditure are equal (%d), no change", player.name, income), colorCodes[player.color])
+    end
 end
 
 function executeActionIssueShares(triggeringPlayer, activePlayer, number)
@@ -398,13 +484,13 @@ function executeActionIssueShares(triggeringPlayer, activePlayer, number)
 
     if number < 0 then
         if printTriggeringPlayer then
-            broadcastToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d (%s)",
+            broadcastToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d (now $%d) (%s)",
                                 activePlayer.name, absolute, phrasing, newPlayerSharesIssued,
-                                deltaMoney, triggeringPlayer.name), colorCodes[activePlayer.color])
+                                deltaMoney, newPlayerMoney, triggeringPlayer.name), colorCodes[activePlayer.color])
         else
-            broadcastToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d",
+            broadcastToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d (now $%d)",
                                 activePlayer.name, absolute, phrasing, newPlayerSharesIssued,
-                                deltaMoney), colorCodes[activePlayer.color])
+                                deltaMoney, newPlayerMoney), colorCodes[activePlayer.color])
         end
     else
         if printTriggeringPlayer then
@@ -679,7 +765,9 @@ function submitClick(obj, color)
     if executeCurrentAction(color) then
         clearControls()
     else
-        print("action failed")
+        printToAll("action failed", colorCodes.Red)
+        clearDisplay()
+        isNegated = false
     end
 end
 
@@ -827,7 +915,6 @@ function refreshPlayerNames()
     --printAllButtons()
 
     for index, player in ipairs(players) do
-        --print("checking player ", dump(player))
         if index == activePlayer then
             self.editButton({index = player['nameButton'], color=playerActiveBackgroundColor})
         else
@@ -963,3 +1050,4 @@ end
 --[[
   End helper methods from my library --
   ]]--
+  
