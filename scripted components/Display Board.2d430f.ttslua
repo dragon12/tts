@@ -1,4 +1,5 @@
 
+
 --[[
  Age of Steam control board by dragon12
   ]]--
@@ -73,36 +74,38 @@ end
 characterLimit = 14
 
 debug = true
+
 players = {}
 
 function onSave()
-    --[[
     if players then
         if #players != 0 then
             local data_to_save = players
-            print("Trying to save: ", dump(players))
             saved_data = JSON.encode(data_to_save)
-            return saved_data
+            return nil
         end
     end
-    --]]
 end
 
 function onload(saved_data)
 
-    --This decodes saved_data if it exists to a table name loaded_data
     if saved_data != nil then
+        print("onload display board: ", dump(saved_data))
+
         loaded_data = JSON.decode(saved_data)
+        loaded_data=nil
 
-        -- we need to initialise all the buttons etc and restore the values
+        if loaded_data != nil then
+            -- we need to initialise all the buttons etc and restore the values
+            players = loaded_data
 
+            print("we had some saved data, reloading: ", dump(players))
+            spawnAll()
+        end
     else
         -- no saved data so we're in initial state; we're waiting for the external call
         loaded_data = nil
     end
-
-    -- todo remove this
-    ext_initAll()
 end
 
 ------ Set up all of the display stuff
@@ -188,8 +191,25 @@ end
    API
 ]]--------------------------
 
+function ext_initFromClean()
+    players = {}
+    currIndex = 0
+
+    local buttons = self.getButtons()
+
+    for k,v in pairs(buttons) do
+        self.removeButton(v.index)
+    end
+end
+
 function ext_initAll()
+    print("display board, ext_initAll")
     currIndex=0
+
+    if not initialisePlayers() then
+        return
+    end
+
     spawnAll()
 end
 
@@ -265,6 +285,7 @@ function initialisePlayers()
     end
 
     for index, playerColor in pairs(seatedColors) do
+        print("players=",dump(players))
         players[index] = {
             color = playerColor,
             name = string.sub(getPlayerName(playerColor), 1, characterLimit)
@@ -275,12 +296,6 @@ function initialisePlayers()
 end
 
 function spawnAll()
-
-    if not initialisePlayers() then
-        return
-    end
-
-
     function getXZ(row, col)
         local xCoord = colCoordsX[col]
         local zCoord = topSummaryRowCoordZ + summaryRowCoordZDelta * ( row - 1 )
@@ -301,7 +316,6 @@ function spawnAll()
                   font_size=headerFontSize * v.fontMultiplier }
 
         local idx = createButton(params)
-        print("created button idx ",idx," with label ", v.label)
     end
 
     local xCoord = 0
@@ -320,23 +334,26 @@ function spawnAll()
         players[i]['nameButton'] = createButton(params)
 
         players[i]['buttons'] = {}
-        players[i]['values'] = {}
+
+        if players[i]['values'] == nil then
+            players[i]['values'] = {}
+            for _,colDetails in pairs(columnDetails) do
+                players[i].values[colDetails.column] = colDetails.startingValue
+            end
+        end
 
         for _, colDetails in pairs(columnDetails) do
-            print("handling player column: ", dump(colDetails))
             if colDetails.column != 1 then -- skip player column
                 xCoord, zCoord = getXZ(i, colDetails.column)
-                params.label = colDetails.startingValue
+                params.label = players[i].values[colDetails.column]
                 params.position = {xCoord, buttonYCoord, zCoord}
-                players[i].values[colDetails.column] = colDetails.startingValue
 
                 local index = createButton(params)
                 players[i].buttons[colDetails.column] = index
                 if debug then
-                    print("created button for ", v.color, ", name=", colDetails.label, ", index=", index)
+                    --print("created button for ", v.color, ", name=", colDetails.label, ", index=", index)
                 end
             end
         end
-        printAllButtons()
     end
 end

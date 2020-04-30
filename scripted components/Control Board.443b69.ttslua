@@ -23,6 +23,16 @@ colorCodes = {
     Black = {r=0.25, g=0.25, b=0.25},
 }
 
+
+function hide(buttonParams_)
+    local newParams = deepcopy(buttonParams_)
+    newParams.label=''
+    newParams.click_function='noop'
+    newParams.position={0,-1,0}
+    newParams.width=0
+    newParams.height=0
+    return newParams
+end
 --[[
   End helper tables from my library --
   ]]--
@@ -38,6 +48,7 @@ isNegated = false
 submittable = false
 
 debug = true
+printTriggeringPlayer=false
 players = {}
 
 function onSave()
@@ -45,7 +56,7 @@ function onSave()
         if #players != 0 then
             local data_to_save = players
             saved_data = JSON.encode(data_to_save)
-            return saved_data
+            return nil
         end
     end
 end
@@ -53,7 +64,11 @@ end
 loaded_data = {}
 
 function onload(saved_data)
-    print("onload control board: ", dump(saved_data))
+    if debug then
+        if saved_data != nil then
+            print("onload control board: ", dump(saved_data))
+        end
+    end
 
     -- if we've already been initialised then populate all of the things
     if saved_data != nil then
@@ -61,21 +76,32 @@ function onload(saved_data)
     else
         loaded_data = nil
     end
-    --loaded_data=nil
+    loaded_data=nil
 
-    currIndex = 0
 
     if loaded_data == nil then
-        -- nothing has been loaded; spawn our Start button
-        players = {}
-        createInitButton() -- this will eventually initialise players
+        print("no loaded data")
+        -- nothing has been loaded; spawn our Init button and nothing else
+        initFromClean()
     else
-        players = loaded_data
         currIndex = 0
+        initButtonParams()
+
+        print("loading data from previous")
+        players = loaded_data
+
+        -- create the init button so we hit spawnAll in the same state as usual
+        createButton(buttonParams.hiddenInit)
         spawnAll()
     end
 end
 
+function initFromClean()
+    currIndex = 0
+    players = {}
+    initButtonParams()
+    createInitButton()
+end
 
 ------ Set up all of the display stuff
 defaultFontSize = 150
@@ -128,43 +154,98 @@ displayFontColor = colorCodes.Brown
 submitButtonActiveFontColor = colorCodes.Red
 submitButtonInactiveFontColor = colorCodes.Grey
 
--- end of turn display
+-- other buttons
+confirmsCoordZ = 0.6
+
 endOfTurnCoordX = 4
 endOfTurnCoordZ = 0
+
 endOfTurnWidth = 800
 endOfTurnHeight = 400
+
 endOfTurnFontSize = defaultFontSize * 0.8
 endOfTurnFontColor = colorCodes.Yellow
 endOfTurnBackgroundColor = colorCodes.Red
 
-endOfTurnYesCoordX = endOfTurnCoordX - 1
-endOfTurnNoCoordX = endOfTurnCoordX + 1
-endOfTurnConfirmsCoordZ = endOfTurnCoordZ + 1
-endOfTurnConfirmsWidth = 300
-endOfTurnConfirmsHeigth = 200
+endOfTurnYesCoordX = endOfTurnCoordX - 0.5
+endOfTurnNoCoordX = endOfTurnCoordX + 0.5
 
-buttonParams = {
-    calcDisplay = {},
-    submit = {},
-    init = {},
-    executeEndOfTurn = nil, -- this one will replace init after we're done
-    confirmEndOfTurnYes = {label='Confirm', click_function='confirmEndOfTurn', function_owner=self,
-                            position={endOfTurnYesCoordX, buttonYCoord, endOfTurnConfirmsCoordZ},
-                            width=endOfTurnConfirmsWidth, height=endOfTurnConfirmsHeight,
-                            color=colorCodes.Red, fontColor=colorCodes.Yellow, },
-    confirmEndOfTurnNo = {label='Cancel', click_function='cancelEndOfTurn', function_owner=self,
-                            position={endOfTurnNoCoordX, buttonYCoord, endOfTurnConfirmsCoordZ},
-                            width=endOfTurnConfirmsWidth, height=endOfTurnConfirmsHeight,
-                            color=colorCodes.Black, fontColor=colorCodes.White, },
-}
+endOfTurnConfirmsWidth = 400
+endOfTurnConfirmsHeight = 200
+resetAllConfirmsWidth = 400
+resetAllConfirmsHeight = 200
 
-function getPlayerByColor(color)
-    for _, player in pairs(players) do
-        if player.color == color then
-            return player
-        end
-    end
-    return nil
+resetAllCoordX = endOfTurnCoordX + 2
+resetAllCoordZ = endOfTurnCoordZ
+resetAllYesCoordX = resetAllCoordX - 0.4
+resetAllNoCoordX = resetAllCoordX + 0.4
+
+resetAllWidth = 800
+resetAllHeight = 400
+
+buttonPositionInit = {0, buttonYCoord, 0}
+
+buttonPositionExecuteEndOfTurn = {endOfTurnCoordX,buttonYCoord,endOfTurnCoordZ}
+buttonPositionEndOfTurnConfirmYes = {endOfTurnYesCoordX, buttonYCoord, confirmsCoordZ}
+buttonPositionEndOfTurnConfirmNo = {endOfTurnNoCoordX, buttonYCoord, confirmsCoordZ}
+
+buttonPositionResetAll = {resetAllCoordX,buttonYCoord,endOfTurnCoordZ}
+buttonPositionResetAllConfirmYes = {resetAllYesCoordX, buttonYCoord, confirmsCoordZ}
+buttonPositionResetAllConfirmNo = {resetAllNoCoordX, buttonYCoord, confirmsCoordZ}
+
+buttonParams = {}
+
+function initButtonParams()
+    buttonParams.calcDisplay = {}
+    buttonParams.submit = {}
+    buttonParams.init = {label='Click Once Seated\nto populate players',
+              click_function='initialiseAndSpawnAll', function_owner=self,
+              position = buttonPositionInit,
+              width=1500,height=500,
+              font_size=defaultFontSize
+          }
+    buttonParams.resetAll = {label='Reset All', click_function='checkConfirmResetAll', function_owner=self,
+                position=buttonPositionResetAll,
+                width=resetAllWidth,height=resetAllHeight,
+                font_size=defaultFontSize
+            }
+
+    buttonParams.executeEndOfTurn = {
+        label='Execute\nEnd Of Turn',
+        click_function='checkConfirmEndOfTurn', function_owner=self,
+        position=buttonPositionExecuteEndOfTurn,
+        width=endOfTurnWidth, height=endOfTurnHeight,
+        font_size=endOfTurnFontSize, font_color=endOfTurnFontColor,
+        color=endOfTurnBackgroundColor,
+    }
+
+    buttonParams.confirmEndOfTurnYes = {label='Confirm', click_function='confirmEndOfTurn', function_owner=self,
+                            position=buttonPositionEndOfTurnConfirmYes,
+                            width=endOfTurnConfirmsWidth, height=endOfTurnConfirmsHeight,
+                            color=colorCodes.Red, font_color=colorCodes.Yellow, }
+
+    buttonParams.confirmEndOfTurnNo = {label='Cancel', click_function='cancelEndOfTurn', function_owner=self,
+                            position=buttonPositionEndOfTurnConfirmNo,
+                            width=endOfTurnConfirmsWidth, height=endOfTurnConfirmsHeight,
+                            color=colorCodes.Black, font_color=colorCodes.White, }
+
+    buttonParams.confirmResetAllYes = {label='Really!', click_function='confirmResetAll', function_owner=self,
+                            position=buttonPositionResetAllConfirmYes,
+                            width=resetAllConfirmsWidth, height=resetAllConfirmsHeight,
+                            color=colorCodes.Black, font_color=colorCodes.Red, }
+
+    buttonParams.confirmResetAllNo = {label='Cancel', click_function='cancelResetAll', function_owner=self,
+                            position=buttonPositionResetAllConfirmNo,
+                            width=resetAllConfirmsWidth, height=resetAllConfirmsHeight,
+                            color=colorCodes.Black, font_color=colorCodes.White, }
+
+    buttonParams.hiddenInit = hide(buttonParams.init)
+    buttonParams.hiddenResetAll = hide(buttonParams.resetAll)
+    buttonParams.hiddenExecuteEndOfTurn = hide(buttonParams.executeEndOfTurn)
+    buttonParams.hiddenConfirmEndOfTurnYes = hide(buttonParams.confirmEndOfTurnYes)
+    buttonParams.hiddenConfirmEndOfTurnNo = hide(buttonParams.confirmEndOfTurnNo)
+    buttonParams.hiddenConfirmResetAllYes = hide(buttonParams.confirmResetAllYes)
+    buttonParams.hiddenConfirmResetAllNo = hide(buttonParams.confirmResetAllNo)
 end
 
 function initialisePlayers()
@@ -190,14 +271,7 @@ function initialisePlayers()
 end
 
 function createInitButton()
-    buttonParams.init = {label='Click Once Seated\nto populate players',
-              click_function='initialiseAndSpawnAll', function_owner=self,
-              position = {0, buttonYCoord, 0},
-              width=500,height=500,
-              font_size=defaultFontSize
-          }
-
-    createButton(buttonParams.init)
+    createButtonWithLinked(buttonParams.init, buttonParams.hiddenInit)
 end
 
 function initialiseAndSpawnAll()
@@ -206,9 +280,8 @@ function initialiseAndSpawnAll()
         return
     end
 
-    -- successful initialisation, copy the init button to executeEndOfTurn
-    buttonParams.executeEndOfTurn = buttonParams.init
-    buttonParams.init = nil
+    -- hide itself by editing as the hidden version
+    self.editButton(buttonParams.hiddenInit)
 
     spawnAll()
 end
@@ -216,72 +289,91 @@ end
 
 function spawnAll()
 
+    -- initialise the other displayBoard
+    local displayBoard = getObjectFromGUID(displayBoardGuid)
+    displayBoard.call("ext_initAll")
+
     createPlayerColumn()
     createActionColumn()
     createCalculator()
-    createEndOfTurnButton()
+
+    createOtherButtons()
 end
 
-function createEndOfTurnButton()
-    -- if we have params already then we edit it, otherwise we create it (i.e. we're loading pre-populated)
+function createOtherButtons()
+    createButtonWithLinked(buttonParams.resetAll, buttonParams.hiddenResetAll)
+    createButtonWithLinked(buttonParams.executeEndOfTurn, buttonParams.hiddenExecuteEndOfTurn)
 
-    local indexToEdit = 0
-    if buttonParams.executeEndOfTurn != nil then
-        indexToEdit = button.executeEndOfTurn.index
+    -- hidden versions of the various other things
+    createButtonWithLinked(buttonParams.hiddenConfirmEndOfTurnYes, buttonParams.confirmEndOfTurnYes)
+    createButtonWithLinked(buttonParams.hiddenConfirmEndOfTurnNo, buttonParams.confirmEndOfTurnNo)
+    createButtonWithLinked(buttonParams.hiddenConfirmResetAllYes, buttonParams.confirmResetAllYes)
+    createButtonWithLinked(buttonParams.hiddenConfirmResetAllNo, buttonParams.confirmResetAllNo)
+end
+
+function checkConfirmResetAll()
+    buttonParams.resetAll.label = 'Reset All??'
+    self.editButton(buttonParams.resetAll)
+    self.editButton(buttonParams.confirmResetAllYes)
+    self.editButton(buttonParams.confirmResetAllNo)
+end
+
+function confirmResetAll()
+    -- remove all buttons
+    local buttons = self.getButtons()
+
+    for k,v in pairs(buttons) do
+        self.removeButton(v.index)
     end
 
-    buttonParams.executeEndOfTurn = {
-        index=indexToEdit,
-        label='Execute\nEnd Of Turn',
-        click_function='checkConfirmEndOfTurn', function_owner=self,
-        position={endOfTurnCoordX,buttonYCoord,endOfTurnCoordZ},
-        width=endOfTurnWidth, height=endOfTurnHeight,
-        font_size=endOfTurnFontSize, font_color=endOfTurnFontColor,
-        color=endOfTurnBackgroundColor,
-    }
+    local displayBoard = getObjectFromGUID(displayBoardGuid)
+    displayBoard.call("ext_initFromClean")
 
-    if indexToEdit == 0 then
-        createButton(buttonParams.executeEndOfTurn)
-    else
-        self.editButton(buttonParams.executeEndOfTurn)
-    end
+    initFromClean()
+end
 
-    -- create the two confirm buttons, invisible for now
-    buttonParams.confirmEndOfTurnYes.label = ''
-    buttonParams.confirmEndOfTurnYes.width = 0
-    buttonParams.confirmEndOfTurnYes.heigth = 0
-    buttonParams.confirmEndOfTurnYes.position = {0,-1,0}
-    createButton(buttonParams.confirmEndOfTurnYes)
-
-    buttonParams.confirmEndOfTurnNo.label = ''
-    buttonParams.confirmEndOfTurnNo.width = 0
-    buttonParams.confirmEndOfTurnNo.heigth = 0
-    buttonParams.confirmEndOfTurnNo.position = {0,-1,0}
-    createButton(buttonParams.confirmEndOfTurnNo)
+function cancelResetAll()
+    buttonParams.resetAll.label = 'Reset All'
+    self.editButton(buttonParams.resetAll)
+    self.editButton(buttonParams.hiddenConfirmResetAllYes)
+    self.editButton(buttonParams.hiddenConfirmResetAllNo)
 end
 
 function checkConfirmEndOfTurn()
-    buttonParams.executeEndOfTurn.width = 0
-    buttonParams.executeEndOfTurn.heigth = 0
+    buttonParams.executeEndOfTurn.label = 'Execute?'
     self.editButton(buttonParams.executeEndOfTurn)
-
-    buttonParams.confirmEndOfTurnYes.label = 'Confirm'
-    buttonParams.confirmEndOfTurnYes.position={endOfTurnYesCoordX, buttonYCoord, endOfTurnConfirmsCoordZ}
-    buttonParams.confirmEndOfTurnYes.width=endOfTurnConfirmsWidth
-    buttonParams.confirmEndOfTurnYes.height=endOfTurnConfirmsHeight
     self.editButton(buttonParams.confirmEndOfTurnYes)
-
-    buttonParams.confirmEndOfTurnNo.label = 'Cancel'
-    buttonParams.confirmEndOfTurnNo.position={endOfTurnNoCoordX, buttonYCoord, endOfTurnConfirmsCoordZ}
-    buttonParams.confirmEndOfTurnNo.width=endOfTurnConfirmsWidth
-    buttonParams.confirmEndOfTurnNo.height=endOfTurnConfirmsHeight
     self.editButton(buttonParams.confirmEndOfTurnNo)
+end
+
+function confirmEndOfTurn(obj, triggeringPlayer)
+    -- do the end of turn upkeep
+    doEndOfTurnUpkeep(obj, triggeringPlayer)
+
+    -- then put the buttons back where they were
+    restoreEndOfTurnButtons()
+end
+
+function cancelEndOfTurn()
+    restoreEndOfTurnButtons()
+end
+
+function restoreEndOfTurnButtons()
+    buttonParams.executeEndOfTurn.label = 'Execute\nEnd Of Turn'
+    self.editButton(buttonParams.executeEndOfTurn)
+    self.editButton(buttonParams.hiddenConfirmEndOfTurnYes)
+    self.editButton(buttonParams.hiddenConfirmEndOfTurnNo)
 end
 
 -- execute the actions
 
 -- todo tidy this up, dynamically find the display board
 displayBoardGuid = '2d430f'
+
+function doEndOfTurnUpkeep(obj, triggeringColor)
+    local triggeringPlayer = getPlayerByColor(triggeringColor)
+    broadcastToAll(string.format("End of turn upkeep starting, triggered by %s", triggeringPlayer), colorCodes.Purple)
+end
 
 function executeActionIssueShares(triggeringPlayer, activePlayer, number)
 
@@ -309,13 +401,25 @@ function executeActionIssueShares(triggeringPlayer, activePlayer, number)
     local phrasing = ( absolute == 1 and " share" or "shares" )
 
     if number < 0 then
-        broadcastToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d (%s)",
+        if printTriggeringPlayer then
+            broadcastToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d (%s)",
                                 activePlayer.name, absolute, phrasing, newPlayerSharesIssued,
                                 deltaMoney, triggeringPlayer.name), colorCodes[activePlayer.color])
+        else
+            broadcastToAll(string.format("WARN: %s recalls %d %s (now %d) for $%d",
+                                activePlayer.name, absolute, phrasing, newPlayerSharesIssued,
+                                deltaMoney), colorCodes[activePlayer.color])
+        end
     else
-        broadcastToAll(string.format("%s issues %d %s (now %d) for $%d (%s)",
+        if printTriggeringPlayer then
+            broadcastToAll(string.format("%s issues %d %s (now %d) for $%d (%s)",
                                 activePlayer.name, absolute, phrasing, newPlayerSharesIssued,
                                 deltaMoney, triggeringPlayer.name), colorCodes[activePlayer.color])
+        else
+            broadcastToAll(string.format("%s issues %d %s (now %d) for $%d",
+                                activePlayer.name, absolute, phrasing, newPlayerSharesIssued,
+                                deltaMoney), colorCodes[activePlayer.color])
+        end
     end
 
     return true
@@ -346,14 +450,26 @@ function executeActionGainIncome(triggeringPlayer, activePlayer, number)
     displayBoard.call("ext_executeUpdateIncome", {player=activePlayer,income=newPlayerIncome})
 
     if number < 0 then
-        broadcastToAll(string.format("WARN: %s's income reduces by %d (now %d) (%s)",
+        if printTriggeringPlayer then
+            broadcastToAll(string.format("WARN: %s's income reduces by %d (now %d) (%s)",
                                 activePlayer.name, math.abs(number), newPlayerIncome, triggeringPlayer.name),
                                 colorCodes[activePlayer.color])
+        else
+            broadcastToAll(string.format("WARN: %s's income reduces by %d (now %d)",
+                                activePlayer.name, math.abs(number), newPlayerIncome),
+                                colorCodes[activePlayer.color])
+        end
 
     else
-        broadcastToAll(string.format("%s's income increases by %d (now %d) (%s)",
+        if printTriggeringPlayer then
+            broadcastToAll(string.format("%s's income increases by %d (now %d) (%s)",
                                 activePlayer.name, number, newPlayerIncome, triggeringPlayer.name),
                                 colorCodes[activePlayer.color])
+        else
+            broadcastToAll(string.format("%s's income increases by %d (now %d)",
+                                activePlayer.name, number, newPlayerIncome),
+                                colorCodes[activePlayer.color])
+        end
     end
 
     return true
@@ -385,14 +501,26 @@ function executeActionLocomotive(triggeringPlayer, activePlayer, number)
     displayBoard.call("ext_executeUpdateLocomotive", {player=activePlayer,locomotive=newPlayerLoco})
 
     if number < 0 then
-        broadcastToAll(string.format("WARN: %s's locomotive reduces by %d (now %d) (%s)",
+        if printTriggeringPlayer then
+            broadcastToAll(string.format("WARN: %s's locomotive reduces by %d (now %d) (%s)",
                                 activePlayer.name, math.abs(number), newPlayerLoco, triggeringPlayer.name),
                                 colorCodes[activePlayer.color])
+        else
+            broadcastToAll(string.format("WARN: %s's locomotive reduces by %d (now %d)",
+                                activePlayer.name, math.abs(number), newPlayerLoco),
+                                colorCodes[activePlayer.color])
+        end
 
     else
-        broadcastToAll(string.format("%s's locomotive increases by %d (now %d) (%s)",
+        if printTriggeringPlayer then
+            broadcastToAll(string.format("%s's locomotive increases by %d (now %d) (%s)",
                                 activePlayer.name, number, newPlayerLoco, triggeringPlayer.name),
                                 colorCodes[activePlayer.color])
+        else
+            broadcastToAll(string.format("%s's locomotive increases by %d (now %d)",
+                                activePlayer.name, number, newPlayerLoco),
+                                colorCodes[activePlayer.color])
+        end
     end
 
     return true
@@ -420,14 +548,26 @@ function executeActionPayCash(triggeringPlayer, activePlayer, number)
     displayBoard.call("ext_executeUpdateMoney", {player=activePlayer,money=newPlayerCash})
 
     if number > 0 then
-        broadcastToAll(string.format("WARN: %s's cash increases by $%d (now %d) (%s)",
+        if printTriggeringPlayer then
+            broadcastToAll(string.format("WARN: %s's cash increases by $%d (now %d) (%s)",
                                 activePlayer.name, number, newPlayerCash, triggeringPlayer.name),
                                 colorCodes[activePlayer.color])
+        else
+            broadcastToAll(string.format("WARN: %s's cash increases by $%d (now %d)",
+                                activePlayer.name, number, newPlayerCash),
+                                colorCodes[activePlayer.color])
+        end
 
     else
-        broadcastToAll(string.format("%s paid $%d (remaining $%d) (%s)",
+        if printTriggeringPlayer then
+            broadcastToAll(string.format("%s paid $%d (remaining $%d) (%s)",
                                 activePlayer.name, math.abs(number), newPlayerCash, triggeringPlayer.name),
                                 colorCodes[activePlayer.color])
+        else
+            broadcastToAll(string.format("%s paid $%d (remaining $%d)",
+                                activePlayer.name, math.abs(number), newPlayerCash),
+                                colorCodes[activePlayer.color])
+        end
     end
 
     return true
@@ -681,8 +821,6 @@ function createPlayerColumn()
 end
 
 function setActivePlayerName(obj, col, i)
-    print("setActivePlayerName,obj=",dump(obj),", col=", dump(col), ", i=", dump(i))
-
     -- loop over all of the players, set all to default background and make one active
     activePlayer = i
 
@@ -771,10 +909,18 @@ function dump(o)
    end
 end
 
+function createButtonWithLinked(params, linked)
+    local id = createButton(params)
+    linked.index = id
+    return id
+end
+
 function createButton(params)
     params.index = currIndex
     params.created = true
+
     self.createButton(params)
+
     currIndex = currIndex + 1
     return params.index
 end
@@ -794,6 +940,30 @@ end
 function noop()
 end
 
+
+function getPlayerByColor(color)
+    for _, player in pairs(players) do
+        if player.color == color then
+            return player
+        end
+    end
+    return nil
+end
+
+function deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[deepcopy(orig_key)] = deepcopy(orig_value)
+        end
+        setmetatable(copy, deepcopy(getmetatable(orig)))
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
 --[[
   End helper methods from my library --
   ]]--
