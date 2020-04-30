@@ -74,33 +74,36 @@ end
 characterLimit = 14
 
 debug = true
+verboseDebug = false
 
 players = {}
+currIndex = 0
 
 function onSave()
-    if players then
-        if #players != 0 then
-            local data_to_save = players
-            saved_data = JSON.encode(data_to_save)
-            return nil
-        end
+    if players and #players != 0 then
+        local data_to_save = players
+        saved_data = JSON.encode(data_to_save)
+        return saved_data
+    else
+        return JSON.encode({})
     end
 end
 
 function onload(saved_data)
 
     if saved_data != nil then
-        print("onload display board: ", dump(saved_data))
+        if verboseDebug then
+            print("onload display board: ", dump(saved_data))
+        end
 
         loaded_data = JSON.decode(saved_data)
-        loaded_data=nil
 
-        if loaded_data != nil then
+        if loaded_data != nil and #loaded_data != 0 then
             -- we need to initialise all the buttons etc and restore the values
             players = loaded_data
-
-            print("we had some saved data, reloading: ", dump(players))
             spawnAll()
+        else
+            players = {}
         end
     else
         -- no saved data so we're in initial state; we're waiting for the external call
@@ -203,7 +206,6 @@ function ext_initFromClean()
 end
 
 function ext_initAll()
-    print("display board, ext_initAll")
     currIndex=0
 
     if not initialisePlayers() then
@@ -285,7 +287,6 @@ function initialisePlayers()
     end
 
     for index, playerColor in pairs(seatedColors) do
-        print("players=",dump(players))
         players[index] = {
             color = playerColor,
             name = string.sub(getPlayerName(playerColor), 1, characterLimit)
@@ -350,8 +351,8 @@ function spawnAll()
 
                 local index = createButton(params)
                 players[i].buttons[colDetails.column] = index
-                if debug then
-                    --print("created button for ", v.color, ", name=", colDetails.label, ", index=", index)
+                if verboseDebug then
+                    print("created button for ", v.color, ", name=", colDetails.label, ", index=", index)
                 end
             end
         end

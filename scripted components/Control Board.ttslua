@@ -50,49 +50,45 @@ submittable = false
 debug = true
 printTriggeringPlayer=false
 players = {}
+currIndex = 0
 
 function onSave()
-    if players then
-        if #players != 0 then
-            local data_to_save = players
-            saved_data = JSON.encode(data_to_save)
-            return nil
-        end
+    if players and #players != 0 then
+        local data_to_save = players
+        saved_data = JSON.encode(data_to_save)
+        return saved_data
+    else
+        return JSON.encode({})
     end
 end
-
-loaded_data = {}
 
 function onload(saved_data)
     if debug then
         if saved_data != nil then
-            print("onload control board: ", dump(saved_data))
+            --print("onload control board: ", dump(saved_data))
         end
     end
 
     -- if we've already been initialised then populate all of the things
+    loaded_data = {}
     if saved_data != nil then
         loaded_data = JSON.decode(saved_data)
     else
         loaded_data = nil
     end
-    loaded_data=nil
 
-
-    if loaded_data == nil then
-        print("no loaded data")
-        -- nothing has been loaded; spawn our Init button and nothing else
-        initFromClean()
-    else
-        currIndex = 0
+    if loaded_data != nil and #loaded_data != 0 then
         initButtonParams()
 
-        print("loading data from previous")
         players = loaded_data
 
         -- create the init button so we hit spawnAll in the same state as usual
         createButton(buttonParams.hiddenInit)
         spawnAll()
+    else
+        players = {}
+        -- nothing has been loaded; spawn our Init button and nothing else
+        initFromClean()
     end
 end
 
@@ -280,6 +276,10 @@ function initialiseAndSpawnAll()
         return
     end
 
+    -- initialise the other displayBoard
+    local displayBoard = getObjectFromGUID(displayBoardGuid)
+    displayBoard.call("ext_initAll")
+
     -- hide itself by editing as the hidden version
     self.editButton(buttonParams.hiddenInit)
 
@@ -288,10 +288,6 @@ end
 
 
 function spawnAll()
-
-    -- initialise the other displayBoard
-    local displayBoard = getObjectFromGUID(displayBoardGuid)
-    displayBoard.call("ext_initAll")
 
     createPlayerColumn()
     createActionColumn()
@@ -372,7 +368,7 @@ displayBoardGuid = '2d430f'
 
 function doEndOfTurnUpkeep(obj, triggeringColor)
     local triggeringPlayer = getPlayerByColor(triggeringColor)
-    broadcastToAll(string.format("End of turn upkeep starting, triggered by %s", triggeringPlayer), colorCodes.Purple)
+    broadcastToAll(string.format("End of turn upkeep starting, triggered by %s", triggeringPlayer.name), colorCodes.Purple)
 end
 
 function executeActionIssueShares(triggeringPlayer, activePlayer, number)
